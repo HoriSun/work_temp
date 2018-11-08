@@ -85,6 +85,8 @@ class LogManager(object):
                                                          x[0].second),
                                          x[1]),
                               log_files_stamp)
+
+
         log_files_stamp.sort(key=lambda e: e[0]) # small index for earlier
         print "log files: "
         print "\n".join(map(lambda x: x[1]+" "+x[2]+"  "+x[3],log_files_stamp))
@@ -95,37 +97,81 @@ class LogManager(object):
             else:
                 log_files_date_map[x[1]].append(x)
             pass
+
+        log_files_date_map_split_with_size = {}
+        for date in log_files_date_map:
+            log_files_a_day = log_files_date_map[date]
+            ifile = 0
+            max_ifile = len( log_files_a_day )
+            iarchive = 0
+            log_files_date_map_split_with_size[date] = []
+            accumulated_size = 0
+            #for x in log_files_date_map[date]:
+            while( ifile < max_ifile ):
+                f = log_files_a_day[ifile]
+                if ( accumulated_size == 0 ): # new partition
+                    log_files_date_map_split_with_size[date].append([])
+                    pass
+
+                if ( accumulated_size < self.log_packup_size_unit ): # add more 
+                    accumulated_size += round( os.path.getsize(f[-1])/1000.0 )
+                    log_files_date_map_split_with_size[date][iarchive].append(f)
+
+                if (accumulated_size >= self.log_packup_size_unit) :
+                    iarchive += 1
+                    accumulated_size = 0
+
+                ifile += 1
+                pass # while
+
+        #print log_files_date_map_split_with_size
+        #print "<","="*10
+        #for date in log_files_date_map_split_with_size:
+        #    print date
+        #    for split in log_files_date_map_split_with_size[date]:
+        #        print " - "
+        #        for x in split:
+        #            print "   ", x[-1]
+        #print ">","="*10
+                    
         
-        for x in log_files_date_map:
+        #for x in log_files_date_map:
+        for x in log_files_date_map_split_with_size:
             print x
-            temp_dir_name = "temp_pack_" + str(uuid.uuid4()) + "_"+x
-            directory_to_pack = ( self.log_archive_name_prefix + 
-                                  "__" + 
-                                  x )
-            os.makedirs( os.path.join( temp_dir_name ,
-                                       directory_to_pack ) )
-            self.fix_permission( temp_dir_name )
+            temp_dir_name = "temp_pack_" + str(uuid.uuid4()) + "_" + x
+            for i in xrange(len(log_files_date_map_split_with_size[x])):
+                directory_to_pack = ( self.log_archive_name_prefix + 
+                                      "__" + 
+                                      x + 
+                                      "_" + 
+                                      str(i) )
+                os.makedirs( os.path.join( temp_dir_name ,
+                                           directory_to_pack ) )
+                self.fix_permission( temp_dir_name )
 
-            for y in log_files_date_map[x]:
-                filename = y[-1]
-                print "   ", filename
-                shutil.move( filename, 
-                             os.path.join( os.path.join( temp_dir_name ,
-                                                         directory_to_pack ) ,
-                                           filename ) )
+                for y in log_files_date_map_split_with_size[x][i]:
+                    filename = y[-1]
+                    print "   ", filename
+                    shutil.move( filename, 
+                                 os.path.join( os.path.join( temp_dir_name ,
+                                                             directory_to_pack ) ,
+                                               filename ) )
+                    pass
                 pass
-            pass
 
-            pwd = self.get_pwd()
-            os.chdir( temp_dir_name )
+                pwd = self.get_pwd()
+                os.chdir( temp_dir_name )
 
-            self.pack( target_file = os.path.join( self.log_archive_path,
-                                                   ( directory_to_pack + 
-                                                     "__pack-" + 
-                                                     datetime.datetime.now().strftime("%Y%m%d-%H%M%S") + 
-                                                     ".tar.gz" ) ),
-                       path_to_pack = directory_to_pack )
+                self.pack( target_file = os.path.join( self.log_archive_path,
+                                                       ( directory_to_pack + 
+                                                         "__pack-" + 
+                                                         datetime.datetime.now().strftime("%Y%m%d-%H%M%S") + 
+                                                         ".tar.gz" ) ),
+                           path_to_pack = directory_to_pack )
+                # must move back first
+                os.chdir( pwd )
 
+            # move back again for safety
             os.chdir( pwd )
             
             shutil.rmtree( temp_dir_name )
